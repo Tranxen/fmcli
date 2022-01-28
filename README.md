@@ -18,3 +18,8 @@ For the unfortunate souls who have to be working on FTD...
 
 * Browsing of object list
 * Allowing the application to use an existing object instead of creating a new one when the host/subnet/fqdn/group already exist
+
+-- List of misc stuff that I plan to add 
+
+* config file to store credential, FMC URL and some other options
+ 
