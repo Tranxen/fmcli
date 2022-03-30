@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <ctype.h>
 #include <curl/curl.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -9,7 +10,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <errno.h>
-#include "global.h"
+//#include "global.h"
 
 //#include <jansson.h>
 //#include <curses.h>
@@ -40,6 +41,10 @@ unsigned char g_flag=1;
 
 #define FLAG_RESOLV_IP 1
 
+char g_conf_url[1024];
+char g_conf_usr[1024];
+char g_conf_pwd[1024];
+char g_conf_dom[1024];
 
 /* Return the offset of the first newline in text or the length of
    text if there's no newline */
@@ -133,7 +138,11 @@ static char *request(const char *url, const char* postdata, unsigned char flag) 
     }
 
     if(flag == CL_TOKEN){
-      curl_easy_setopt(curl, CURLOPT_USERPWD, "<USER>:<PASSWORD>");
+      char userpwd[1024]; memset(userpwd, '\0', 1024);
+      strncpy(userpwd, g_conf_usr, 256);
+      strncat(userpwd, ":", 2);
+      strncat(userpwd, g_conf_pwd, 256);
+      curl_easy_setopt(curl, CURLOPT_USERPWD, userpwd);
       curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long) strlen(dummy));
       curl_easy_setopt(curl, CURLOPT_POSTFIELDS, dummy);
       curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION,header_callback);
@@ -208,6 +217,47 @@ error:
     return NULL;
 }
 
+void read_config_file(const char* file){
+
+  memset(g_conf_url,'\0',1024);
+  memset(g_conf_usr,'\0',1024);
+  memset(g_conf_pwd,'\0',1024);
+  memset(g_conf_dom,'\0',1024);
+
+  FILE* f=fopen(file, "r");
+  if(!f){
+    printf("file <%s> not found\n", file);
+    exit(-1);
+  }
+
+  char tfg[1024];memset(tfg,'\0',1024);
+  while(fgets (tfg, 1024, f)!=NULL ){
+
+    if(strlen(tfg) < 4){
+      printf("wrong synthax for config line <%s>\n", tfg);
+      exit(-1);
+    }
+			
+    switch(tfg[2]){
+    case 'l': strncpy(g_conf_url, tfg+4, 1024); g_conf_url[strlen(g_conf_url)-1]='\0';break;
+    case 'r': strncpy(g_conf_usr, tfg+4, 1024); g_conf_usr[strlen(g_conf_usr)-1]='\0';break;
+    case 'd': strncpy(g_conf_pwd, tfg+4, 1024); g_conf_pwd[strlen(g_conf_pwd)-1]='\0';break;
+    case 'm': strncpy(g_conf_dom, tfg+4, 1024); g_conf_dom[strlen(g_conf_dom)-1]='\0';break;
+    defautl : printf("unknown option <%s>\n", tfg); exit(-1);
+    }
+
+    memset(tfg,'\0',1024);
+    
+  }
+
+  fclose(f);
+
+  printf("l:%s\n",g_conf_url);
+  printf("r:%s\n",g_conf_usr);
+  printf("d:%s\n",g_conf_pwd);
+  printf("m:%s\n",g_conf_dom);
+  
+}
 
 void check_ip_addr(char* ip){
 
@@ -295,7 +345,7 @@ int get_network_type(char* type, char* defaultname, char* ip){
     
     strncpy(defaultname, "G_net-", 6);
     strncat(defaultname, _ip_, 16);
-    strncat(defaultname, "-", 1);
+    strncat(defaultname, "-", 2);
     strncat(defaultname, _mask_, 2);
     // set type 
     strncpy(type, "network", 7);
@@ -369,11 +419,14 @@ void add_network_object(char* ip, char* name, char* desc, unsigned char flag){
 
   printf("P:%s\n", postdata);
 
-  char url_base[1024];
-  strncpy(url_base, "https://<URL>/api/fmc_config/v1/domain/<DOMAIN>/object/", 256);
+  char url_base[2048];
+  strncpy(url_base, g_conf_url, 2048);
+  strncat(url_base, "/api/fmc_config/v1/domain/", 64);
+  strncat(url_base, g_conf_dom, 256);
+  strncat(url_base, "/object/", 16);
   
   strncat(url_base, _type_, 16);
-  strncat(url_base, "s", 1);
+  strncat(url_base, "s", 2);
 
   printf("U:%s\n", url_base);
 
@@ -442,8 +495,11 @@ void add_group_object(char* data, char* description){
 
   printf("P:%s\n", postdata);
 
-  char url_base[1024];
-  strncpy(url_base, "https://<FMC_IP_ADDRESS>/api/fmc_config/v1/domain/DOMAIN/object/networkgroups", 256);
+  char url_base[2048];
+  strncpy(url_base, g_conf_url, 1024);
+  strncat(url_base, "/api/fmc_config/v1/domain/", 64);
+  strncat(url_base, g_conf_dom, 256);
+  strncat(url_base, "/object/networkgroups", 64);
 
   printf("U:%s\n", url_base);
 
@@ -495,6 +551,8 @@ int main(int argc, char** argv)
   int c;
 
   opterr = 0;
+
+  read_config_file(".config");
 
   while ((c = getopt (argc, argv, "G:i:n:d:h")) != -1){
     switch (c)
@@ -580,8 +638,10 @@ int main(int argc, char** argv)
   }
 
   if(!fd){
-    printf("* requesting new auth token\n");
-    const char *url = "https://<FMC_IP_ADDRESS>/api/fmc_platform/v1/auth/generatetoken";
+    char url[2048];
+    strncpy(url,g_conf_url,1024);
+    strncat(url,"/api/fmc_platform/v1/auth/generatetoken",256);
+    printf("* requesting new auth token (%s)\n", url);
     text = request(url, NULL, CL_TOKEN);
   }
   printf("  - %s\n\n", g_str_access_token);
