@@ -360,7 +360,14 @@ int get_network_type(char* type, char* defaultname, char* ip){
 
     if(ip[0] == '.'){
       resolv_ip = 1;
-      ip=ip+1;
+      //ip=ip+1;
+      //shifting char to the left to remove the '.'
+      int i=0;
+      for(i=0;ip[i+1]!='\0';i++){
+	ip[i]=ip[i+1];
+      }
+      ip[i]='\0';
+      //--
     }
 
     check_ip_addr(ip);
